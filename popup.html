@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>i18n Translator</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>i18n Translator</h1>
+
+      <div class="file-upload">
+        <div id="language-files-container">
+          <!-- 여기에 언어 파일 입력 폼이 동적으로 추가됩니다 -->
+        </div>
+
+        <div class="action-buttons">
+          <button id="add-language-btn" class="secondary-btn">언어 추가</button>
+          <button id="upload-btn" class="primary-btn">파일 업로드</button>
+          <button id="reset-btn" class="danger-btn">초기화</button>
+        </div>
+      </div>
+
+      <div class="status-message" id="status-message"></div>
+
+      <div class="translation-display" id="translation-display">
+        <h2>번역 키</h2>
+        <div class="translation-list" id="translation-list">
+          <!-- 여기에 번역 키가 표시됩니다 -->
+        </div>
+      </div>
+    </div>
+
+    <template id="language-input-template">
+      <div class="language-input">
+        <div class="input-group">
+          <div class="lang-code-wrapper">
+            <input type="text" class="lang-code" placeholder="언어 코드" />
+          </div>
+          <div class="file-input-wrapper">
+            <div class="tab-container">
+              <span class="tab active" data-target="file-tab">파일</span>
+              <span class="tab" data-target="url-tab">URL</span>
+            </div>
+            <div class="tab-content file-tab active">
+              <label class="file-btn"
+                >파일 선택
+                <input type="file" class="lang-file" accept=".json" />
+              </label>
+              <span class="file-name">선택된 파일 없음</span>
+            </div>
+            <div class="tab-content url-tab">
+              <div class="url-selector">
+                <select class="url-type">
+                  <option value="single">단일 JSON URL</option>
+                  <option value="github">GitHub 폴더</option>
+                </select>
+              </div>
+
+              <div class="url-single">
+                <input
+                  type="text"
+                  class="url-input"
+                  placeholder="JSON URL (https://...)"
+                />
+                <button class="fetch-btn">가져오기</button>
+              </div>
+
+              <div class="url-github" style="display: none">
+                <div class="github-form">
+                  <input
+                    type="text"
+                    class="github-owner"
+                    placeholder="소유자/조직"
+                  />
+                  <input type="text" class="github-repo" placeholder="저장소" />
+                  <input
+                    type="text"
+                    class="github-path"
+                    placeholder="경로 (예: locales/en)"
+                  />
+                  <input
+                    type="text"
+                    class="github-branch"
+                    placeholder="브랜치 (기본: main)"
+                  />
+                  <button class="github-fetch-btn">폴더 불러오기</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button class="remove-lang-btn">×</button>
+        </div>
+      </div>
+    </template>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

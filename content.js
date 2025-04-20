@@ -353,6 +353,32 @@ function createPanelHeader(title) {
   const titleElem = document.createElement("span");
   titleElem.textContent = title;
 
+  const buttonContainer = document.createElement("div");
+  buttonContainer.style.cssText = `
+    display: flex;
+    gap: 10px;
+  `;
+
+  // 새로고침 버튼 추가
+  const refreshButton = document.createElement("button");
+  refreshButton.innerHTML = "↻";
+  refreshButton.title = "다시 받아오기";
+  refreshButton.style.cssText = `
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+  `;
+  refreshButton.addEventListener("click", () => {
+    // 현재 페이지 다시 처리
+    const panel = document.getElementById("i18n-translation-panel");
+    if (panel) document.body.removeChild(panel);
+    processPage();
+  });
+
   const closeButton = document.createElement("button");
   closeButton.innerHTML = "×";
   closeButton.style.cssText = `
@@ -369,18 +395,35 @@ function createPanelHeader(title) {
     if (panel) document.body.removeChild(panel);
   });
 
+  buttonContainer.appendChild(refreshButton);
+  buttonContainer.appendChild(closeButton);
+
   header.appendChild(titleElem);
-  header.appendChild(closeButton);
+  header.appendChild(buttonContainer);
 
   return header;
 }
 
 // 확장 프로그램 팝업으로부터 메시지 수신
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log("Content script received message:", message.action);
+
   if (message.action === "updateTranslations") {
+    console.log(
+      "Updating translations in content script:",
+      Object.keys(message.translations)
+    );
     translations = message.translations;
 
-    // 즉시 처리 시도
+    // 응답 보내기
+    if (sendResponse) {
+      sendResponse({
+        success: true,
+        message: "번역 데이터가 업데이트되었습니다.",
+      });
+    }
+
+    // 즉시 처리
     setTimeout(() => {
       processPage();
 
@@ -389,13 +432,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         processPage();
       }, 1000);
     }, 100);
+
+    return true; // 비동기 응답을 위해 true 반환
   } else if (message.action === "processPage") {
     processPage();
+    if (sendResponse) {
+      sendResponse({ success: true });
+    }
+    return true;
+  } else if (message.action === "clearTranslations") {
+    translations = null;
+    // 패널이 열려있으면 닫기
+    const existingPanel = document.getElementById("i18n-translation-panel");
+    if (existingPanel) {
+      document.body.removeChild(existingPanel);
+    }
+    if (sendResponse) {
+      sendResponse({ success: true });
+    }
+    return true;
   }
+
+  return false;
 });
 
 // 페이지 로드 시 저장된 번역 데이터 불러오기
 chrome.storage.local.get("translations", (data) => {
+  console.log(
+    "Loading translations from storage:",
+    data.translations ? Object.keys(data.translations) : "none"
+  );
+
   if (data.translations) {
     translations = data.translations;
     console.log("Translation data loaded:", Object.keys(translations));

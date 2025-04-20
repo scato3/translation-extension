@@ -1,115 +1,125 @@
-// 익스텐션이 설치될 때 실행
+// i18n 번역기 배경 스크립트
+
+// 번역 데이터
+let translations = {};
+
+// 설치 시 초기화
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("i18n Translator 확장 프로그램이 설치되었습니다.");
+  console.log("i18n 번역기가 설치되었습니다.");
+
+  // 저장된 번역 데이터 불러오기
+  loadTranslations();
 });
 
-// 브라우저 액션 클릭 이벤트
-chrome.action.onClicked.addListener((tab) => {
-  // 액티브 탭에 메시지 전송
-  chrome.tabs.sendMessage(tab.id, { action: "processPage" });
-});
+// 시작 시 데이터 불러오기
+loadTranslations();
 
-// 컨텍스트 메뉴 생성
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: "process-page",
-    title: "현재 페이지의 i18n 키 분석",
-    contexts: ["page"],
-  });
-});
-
-// 컨텍스트 메뉴 클릭 이벤트
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "process-page") {
-    // 액티브 탭에 메시지 전송
-    chrome.tabs.sendMessage(tab.id, { action: "processPage" });
-  }
-});
-
-// 탭이 업데이트될 때 (페이지가 로드될 때) 아이콘 활성화
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete" && tab.active) {
-    chrome.action.enable(tabId);
-  }
-});
-
-// 확장 프로그램 설치/업데이트 시 실행
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("i18n Translator 확장 프로그램이 설치/업데이트되었습니다.");
-});
-
-// 메시지 핸들러
+// 메시지 리스너 설정
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // JSON을 가져오는 요청 처리
-  if (message.action === "fetchJSON") {
-    fetch(message.url)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((data) => {
-        sendResponse({ success: true, data: data });
-      })
-      .catch((error) => {
-        sendResponse({ success: false, error: error.message });
-      });
+  console.log("배경 스크립트에서 수신한 메시지:", message.action);
 
-    // 비동기 응답을 위해 true 반환
+  // 핑 응답 (연결 확인용)
+  if (message.action === "ping") {
+    console.log("핑 요청 수신됨");
+    sendResponse({ success: true, message: "배경 스크립트 연결됨" });
     return true;
   }
 
-  // GitHub 폴더 내용을 가져오는 요청 처리
-  if (message.action === "fetchGitHubFolder") {
-    const { owner, repo, path, branch = "main" } = message;
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
-
-    fetch(apiUrl)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((data) => {
-        // JSON 파일 필터링
-        const jsonFiles = data.filter(
-          (item) => item.type === "file" && item.name.endsWith(".json")
-        );
-        sendResponse({ success: true, files: jsonFiles });
-      })
-      .catch((error) => {
-        sendResponse({ success: false, error: error.message });
-      });
-
+  // 번역 데이터 요청
+  if (message.action === "getTranslations") {
+    console.log("번역 데이터 요청 수신됨", Object.keys(translations));
+    sendResponse({ translations: translations });
     return true;
   }
 
-  // 폴더 내 모든 JSON 파일을 로드하는 요청 처리
-  if (message.action === "loadFolderJSON") {
-    const fetchPromises = message.files.map((file) =>
-      fetch(file.download_url)
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          return response.json();
-        })
-        .then((data) => ({
-          name: file.name.replace(".json", ""),
-          data: data,
-        }))
-    );
-
-    Promise.all(fetchPromises)
-      .then((results) => {
-        sendResponse({ success: true, data: results });
-      })
-      .catch((error) => {
-        sendResponse({ success: false, error: error.message });
+  // 번역 데이터 업데이트
+  if (message.action === "updateTranslations") {
+    if (!message.translations) {
+      sendResponse({
+        success: false,
+        error: "번역 데이터가 제공되지 않았습니다.",
       });
+      return true;
+    }
 
+    translations = message.translations;
+    saveTranslations(translations);
+
+    // 모든 탭에 업데이트 알림
+    broadcastToAllTabs();
+
+    sendResponse({ success: true });
     return true;
   }
+
+  // 번역 데이터 초기화
+  if (message.action === "clearTranslations") {
+    translations = {};
+    chrome.storage.local.remove("translations", () => {
+      console.log("번역 데이터가 초기화되었습니다.");
+
+      // 모든 탭에 알림
+      broadcastToAllTabs();
+
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+
+  return false; // 비동기 응답이 필요 없는 경우
 });
+
+// 저장된 번역 데이터 불러오기
+function loadTranslations() {
+  chrome.storage.local.get("translations", (result) => {
+    if (chrome.runtime.lastError) {
+      console.error("번역 데이터 로드 오류:", chrome.runtime.lastError);
+      return;
+    }
+
+    if (result.translations) {
+      translations = result.translations;
+      console.log("번역 데이터 로드됨:", Object.keys(translations));
+    } else {
+      console.log("저장된 번역 데이터가 없습니다.");
+    }
+  });
+}
+
+// 번역 데이터 저장
+function saveTranslations(data) {
+  chrome.storage.local.set({ translations: data }, () => {
+    if (chrome.runtime.lastError) {
+      console.error("번역 데이터 저장 오류:", chrome.runtime.lastError);
+    } else {
+      console.log("번역 데이터 저장됨:", Object.keys(data));
+    }
+  });
+}
+
+// 모든 탭에 메시지 전송
+function broadcastToAllTabs() {
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach((tab) => {
+      // HTTPS 페이지에만 메시지 전송 (보안 정책으로 인해)
+      if (
+        tab.url &&
+        (tab.url.startsWith("http://") || tab.url.startsWith("https://"))
+      ) {
+        chrome.tabs.sendMessage(
+          tab.id,
+          {
+            action: "updateTranslations",
+            translations: translations,
+          },
+          (response) => {
+            // 응답 오류 무시 (콘텐츠 스크립트 자체가 아직 로드되지 않은 페이지일 수 있음)
+            if (chrome.runtime.lastError) {
+              // 오류 무시
+            }
+          }
+        );
+      }
+    });
+  });
+}

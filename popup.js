@@ -15,27 +15,6 @@ const languageInputTemplate = document.getElementById(
 );
 let languageInputs = [];
 
-// URL 타입 변경 이벤트 처리
-function setupURLTypeHandlers(newInput) {
-  const urlTypeSelect = newInput.querySelector(".url-type");
-  const urlSingleDiv = newInput.querySelector(".url-single");
-  const urlGithubDiv = newInput.querySelector(".url-github");
-
-  if (!urlTypeSelect) return;
-
-  urlTypeSelect.addEventListener("change", function () {
-    const selectedValue = this.value;
-
-    if (selectedValue === "single") {
-      urlSingleDiv.style.display = "flex";
-      urlGithubDiv.style.display = "none";
-    } else if (selectedValue === "github") {
-      urlSingleDiv.style.display = "none";
-      urlGithubDiv.style.display = "block";
-    }
-  });
-}
-
 // 언어 입력 추가
 function addLanguageInput(langCode = "", fileName = "", sourceType = "file") {
   const newInput = document
@@ -52,13 +31,6 @@ function addLanguageInput(langCode = "", fileName = "", sourceType = "file") {
   // URL 관련 요소
   const urlInput = newInput.querySelector(".url-input");
   const fetchBtn = newInput.querySelector(".fetch-btn");
-  const urlTypeSelect = newInput.querySelector(".url-type");
-  const urlSingleDiv = newInput.querySelector(".url-single");
-  const urlGithubDiv = newInput.querySelector(".url-github");
-  const githubFetchBtn = newInput.querySelector(".github-fetch-btn");
-
-  // URL 타입 변경 핸들러 설정
-  setupURLTypeHandlers(newInput);
 
   // 언어 코드 설정
   if (langCode) {
@@ -98,6 +70,17 @@ function addLanguageInput(langCode = "", fileName = "", sourceType = "file") {
       // 선택된 탭 활성화
       this.classList.add("active");
       newInput.querySelector("." + targetTab).classList.add("active");
+
+      // URL 탭일 때는 URL의 X 버튼만 표시
+      if (targetTab === "url-tab") {
+        if (fileRemoveBtn) fileRemoveBtn.style.display = "none";
+        if (urlRemoveBtn) urlRemoveBtn.style.display = "flex";
+      }
+      // 파일 탭일 때는 파일의 X 버튼만 표시
+      else {
+        if (fileRemoveBtn) fileRemoveBtn.style.display = "flex";
+        if (urlRemoveBtn) urlRemoveBtn.style.display = "none";
+      }
     });
   });
 
@@ -123,38 +106,54 @@ function addLanguageInput(langCode = "", fileName = "", sourceType = "file") {
 
       try {
         fileNameDisplay.textContent = "불러오는 중...";
+        showStatus("URL에서 데이터를 가져오는 중...", "info");
 
-        // URL에서 데이터 가져오기
-        chrome.runtime.sendMessage(
-          { action: "fetchJSON", url: url },
-          (response) => {
-            if (response.success) {
-              // 메모리에 데이터 저장
-              const langCode = langCodeInput.value.trim();
-              if (langCode) {
-                // 전역 데이터에 직접 저장
-                translationsData[langCode] = response.data;
+        // fetch API를 사용하여 직접 URL에서 데이터 가져오기
+        const response = await fetch(url);
 
-                // 설정 저장
-                updateLanguageSettings(langCode, url, "url");
+        if (!response.ok) {
+          throw new Error(`HTTP 오류: ${response.status}`);
+        }
 
-                // UI 업데이트
-                fileNameDisplay.textContent = url;
-                fileNameDisplay.classList.add("file-selected");
-                showStatus(
-                  `${langCode} 데이터를 URL에서 불러왔습니다.`,
-                  "success"
-                );
+        const data = await response.json();
 
-                // 번역 목록 업데이트
-                displayTranslations();
-              }
-            } else {
-              fileNameDisplay.textContent = "URL 오류";
-              showStatus(`URL 오류: ${response.error}`, "error");
-            }
+        // 언어 코드 확인
+        const langCode = langCodeInput.value.trim();
+        if (!langCode) {
+          showStatus("언어 코드를 입력해주세요.", "error");
+          fileNameDisplay.textContent = "언어 코드 필요";
+          return;
+        }
+
+        // 데이터 저장
+        translationsData[langCode] = data;
+
+        // 설정 저장
+        updateLanguageSettings(langCode, url, "url");
+
+        // UI 업데이트
+        fileNameDisplay.textContent = url;
+        fileNameDisplay.classList.add("file-selected");
+        showStatus(`${langCode} 데이터를 URL에서 불러왔습니다.`, "success");
+
+        // 번역 목록 업데이트
+        displayTranslations();
+
+        // 크롬 스토리지에 즉시 저장
+        saveAllData(translationsData, null, function (success) {
+          if (success) {
+            console.log("URL에서 가져온 데이터가 스토리지에 저장되었습니다.");
+
+            // 배경 스크립트에도 데이터 업데이트
+            chrome.runtime.sendMessage({
+              action: "updateTranslations",
+              translations: translationsData,
+            });
+
+            // 현재 탭에도 적용
+            applyToCurrentTab();
           }
-        );
+        });
       } catch (error) {
         console.error("URL 데이터 로드 오류:", error);
         fileNameDisplay.textContent = "URL 오류";
@@ -163,432 +162,481 @@ function addLanguageInput(langCode = "", fileName = "", sourceType = "file") {
     });
   }
 
-  // GitHub 폴더 가져오기 버튼 이벤트
-  if (githubFetchBtn) {
-    githubFetchBtn.addEventListener("click", function () {
-      const owner = newInput.querySelector(".github-owner").value.trim();
-      const repo = newInput.querySelector(".github-repo").value.trim();
-      const path = newInput.querySelector(".github-path").value.trim();
-      const branch =
-        newInput.querySelector(".github-branch").value.trim() || "main";
+  // 삭제 버튼 이벤트
+  const fileRemoveBtn = newInput.querySelector(".file-remove-btn");
+  const urlRemoveBtn = newInput.querySelector(".url-remove-btn");
 
-      if (!owner || !repo || !path) {
-        showStatus("GitHub 저장소 정보를 모두 입력해주세요.", "error");
-        return;
+  // 파일 탭 X 버튼 이벤트
+  if (fileRemoveBtn) {
+    fileRemoveBtn.addEventListener("click", function () {
+      const langCode = langCodeInput.value.trim();
+      if (langCode && translationsData[langCode]) {
+        delete translationsData[langCode];
       }
+      newInput.remove();
 
-      fileNameDisplay.textContent = "GitHub 폴더 불러오는 중...";
-
-      // GitHub 폴더 내용 가져오기
-      chrome.runtime.sendMessage(
-        {
-          action: "fetchGitHubFolder",
-          owner,
-          repo,
-          path,
-          branch,
-        },
-        (response) => {
-          if (response.success && response.files && response.files.length > 0) {
-            // 발견된 JSON 파일 목록 표시
-            showStatus(
-              `${response.files.length}개의 JSON 파일을 발견했습니다.`,
-              "success"
-            );
-
-            // JSON 파일 로드
-            chrome.runtime.sendMessage(
-              {
-                action: "loadFolderJSON",
-                files: response.files,
-              },
-              (loadResponse) => {
-                if (loadResponse.success) {
-                  const langCode = langCodeInput.value.trim();
-                  const filesData = loadResponse.data;
-
-                  // 첫 번째 파일의 데이터를 기본으로 사용
-                  let combinedData = {};
-
-                  // 모든 파일의 데이터 병합
-                  filesData.forEach((fileData) => {
-                    combinedData = { ...combinedData, ...fileData.data };
-                  });
-
-                  // 데이터 저장
-                  translationsData[langCode] = combinedData;
-
-                  // 설정 저장 (GitHub URL로)
-                  const repoUrl = `https://github.com/${owner}/${repo}/tree/${branch}/${path}`;
-                  updateLanguageSettings(langCode, repoUrl, "github");
-
-                  // UI 업데이트
-                  fileNameDisplay.textContent = repoUrl;
-                  fileNameDisplay.classList.add("file-selected");
-
-                  // 번역 목록 업데이트
-                  displayTranslations();
-
-                  showStatus(
-                    `${langCode} 데이터를 GitHub에서 불러왔습니다.`,
-                    "success"
-                  );
-                } else {
-                  fileNameDisplay.textContent = "JSON 로드 오류";
-                  showStatus(`JSON 로드 오류: ${loadResponse.error}`, "error");
-                }
-              }
-            );
-          } else {
-            fileNameDisplay.textContent = "GitHub 폴더 오류";
-            showStatus(
-              `GitHub 오류: ${response.error || "JSON 파일을 찾을 수 없습니다."}`,
-              "error"
-            );
-          }
-        }
-      );
+      // 번역 목록 업데이트
+      displayTranslations();
     });
   }
 
-  // 삭제 버튼 이벤트
-  removeBtn.addEventListener("click", function () {
-    const langCodeToRemove = langCodeInput.value.trim();
+  // URL 탭 X 버튼 이벤트
+  if (urlRemoveBtn) {
+    urlRemoveBtn.addEventListener("click", function () {
+      const langCode = langCodeInput.value.trim();
+      if (langCode && translationsData[langCode]) {
+        delete translationsData[langCode];
+      }
+      newInput.remove();
 
-    // 언어 입력 요소 삭제
-    newInput.remove();
-    updateLanguageInputs();
+      // 번역 목록 업데이트
+      displayTranslations();
+    });
+  }
 
-    // 즉시 변경사항 적용 (언어를 삭제하는 경우)
-    if (langCodeToRemove && translationsData[langCodeToRemove]) {
-      // 해당 언어 데이터 삭제
-      delete translationsData[langCodeToRemove];
+  // 초기 상태에서 URL X 버튼 숨김 (파일 탭이 기본)
+  if (urlRemoveBtn) urlRemoveBtn.style.display = "none";
 
-      // 저장된 설정 가져오기
-      chrome.storage.local.get(["languageSettings"], (data) => {
-        let settings = data.languageSettings || [];
-        settings = settings.filter(
-          (setting) => setting.langCode !== langCodeToRemove
-        );
+  // 컨테이너에 추가
+  languageFilesContainer.appendChild(newInput);
+  languageInputs.push(newInput);
 
-        // 저장 및 UI 업데이트
-        saveAllData(translationsData, settings);
-      });
+  return newInput;
+}
+
+// 언어 입력 초기화
+function updateLanguageInputs() {
+  // 기존 입력 폼 제거
+  languageFilesContainer.innerHTML = "";
+  languageInputs = [];
+
+  // 저장된 설정에서 언어 입력 폼 생성
+  chrome.storage.local.get(["languageSettings"], function (result) {
+    const settings = result.languageSettings || {};
+
+    if (Object.keys(settings).length === 0) {
+      // 기본 언어 입력 폼 추가
+      addLanguageInput();
+    } else {
+      // 저장된 설정으로 언어 입력 폼 추가
+      for (const langCode in settings) {
+        const { fileName, sourceType } = settings[langCode];
+        addLanguageInput(langCode, fileName, sourceType);
+      }
     }
   });
-
-  languageFilesContainer.appendChild(newInput);
-  updateLanguageInputs();
 }
 
-// 언어 입력 목록 업데이트
-function updateLanguageInputs() {
-  languageInputs = Array.from(
-    languageFilesContainer.querySelectorAll(".language-input")
-  ).map((input) => {
-    return {
-      element: input,
-      langCodeInput: input.querySelector(".lang-code"),
-      fileInput: input.querySelector(".lang-file"),
-      fileNameDisplay: input.querySelector(".file-name"),
-    };
-  });
-}
-
-// 모든 데이터 저장 (translations + languageSettings)
+// 모든 데이터 저장
 function saveAllData(translations, settings, callback) {
-  console.log("저장 중...", {
-    translations: Object.keys(translations),
-    settings,
-  });
+  // settings가 null이면 UI에서 현재 설정 가져오기
+  if (settings === null) {
+    settings = {};
+    for (const input of languageInputs) {
+      const langCodeInput = input.querySelector(".lang-code");
+      const langCode = langCodeInput.value.trim();
+
+      if (!langCode) continue;
+
+      const activeTab = input.querySelector(".tab.active");
+      const isFileTab = activeTab.getAttribute("data-target") === "file-tab";
+      const fileNameDisplay = input.querySelector(".file-name");
+      const urlInput = input.querySelector(".url-input");
+
+      settings[langCode] = {
+        fileName: isFileTab
+          ? fileNameDisplay.textContent
+          : urlInput.value.trim(),
+        sourceType: isFileTab ? "file" : "url",
+      };
+    }
+  }
+
+  console.log("저장 중인 설정:", settings);
 
   chrome.storage.local.set(
     {
       translations: translations,
       languageSettings: settings,
     },
-    () => {
-      // 전역 변수 업데이트
-      translationsData = translations;
-
-      // UI 업데이트
-      displayTranslations();
-
-      // 컨텐츠 스크립트에 메시지 전송
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs && tabs.length > 0) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-            action: "updateTranslations",
-            translations: translations,
-          });
-        }
-      });
-
-      // 콜백 실행 (있는 경우)
-      if (callback) callback();
+    function () {
+      if (chrome.runtime.lastError) {
+        console.error("저장 오류:", chrome.runtime.lastError);
+        showStatus("저장 중 오류가 발생했습니다.", "error");
+        if (callback) callback(false);
+      } else {
+        console.log("번역 데이터와 설정 저장 완료");
+        if (callback) callback(true);
+      }
     }
   );
 }
 
 // 저장된 설정 로드
 function loadSavedSettings() {
-  // 입력 영역 초기화
-  languageFilesContainer.innerHTML = "";
+  chrome.storage.local.get(
+    ["translations", "languageSettings"],
+    function (result) {
+      const savedTranslations = result.translations || {};
 
-  chrome.storage.local.get(["translations", "languageSettings"], (data) => {
-    console.log("로드된 데이터:", data);
+      // 번역 데이터 로드
+      translationsData = savedTranslations;
 
-    // 전역 변수에 데이터 할당
-    translationsData = data.translations || {};
-    const savedSettings = data.languageSettings || [];
+      // UI 업데이트
+      updateLanguageInputs();
+      displayTranslations();
 
-    console.log("로드된 translations:", Object.keys(translationsData));
-    console.log("로드된 settings:", savedSettings);
-
-    // 1. 설정 기반으로 입력 필드 생성
-    if (savedSettings.length > 0) {
-      savedSettings.forEach(({ langCode, fileName, sourceType = "file" }) => {
-        addLanguageInput(langCode, fileName, sourceType);
-      });
+      if (Object.keys(savedTranslations).length > 0) {
+        showStatus("저장된 번역 데이터를 불러왔습니다.", "success");
+      }
     }
-    // 2. translations 데이터만 있는 경우
-    else if (Object.keys(translationsData).length > 0) {
-      Object.keys(translationsData).forEach((langCode) => {
-        addLanguageInput(langCode, `${langCode}.json`);
-      });
-    }
-    // 3. 아무것도 없으면 기본값
-    else {
-      addLanguageInput("ko");
-      addLanguageInput("en");
-    }
+  );
+}
 
-    // 입력 필드 정보 업데이트
-    updateLanguageInputs();
+// 번역 데이터 적용
+function applyTranslations() {
+  // 언어 설정 수집
+  const settings = {};
+  const promises = [];
 
-    // 번역 목록 표시
-    displayTranslations();
+  // 각 언어 입력 폼 처리
+  for (const input of languageInputs) {
+    const langCodeInput = input.querySelector(".lang-code");
+    const langCode = langCodeInput.value.trim();
+
+    if (!langCode) continue;
+
+    const fileInput = input.querySelector(".lang-file");
+    const activeTab = input.querySelector(".tab.active");
+    const isFileTab = activeTab.getAttribute("data-target") === "file-tab";
+    const urlInput = input.querySelector(".url-input");
+
+    if (isFileTab && fileInput.files.length > 0) {
+      // 파일에서 데이터 로드
+      const file = fileInput.files[0];
+      const promise = readFileAsync(file)
+        .then((data) => {
+          try {
+            const jsonData = JSON.parse(data);
+            translationsData[langCode] = jsonData;
+            settings[langCode] = {
+              fileName: file.name,
+              sourceType: "file",
+            };
+            return true;
+          } catch (e) {
+            showStatus(`${langCode} 파일 파싱 오류: ${e.message}`, "error");
+            return false;
+          }
+        })
+        .catch((error) => {
+          showStatus(`${langCode} 파일 읽기 오류: ${error.message}`, "error");
+          return false;
+        });
+
+      promises.push(promise);
+    } else if (!isFileTab && urlInput.value.trim()) {
+      // URL 데이터는 이미 처리되었으므로 설정만 저장
+      settings[langCode] = {
+        fileName: urlInput.value.trim(),
+        sourceType: "url",
+      };
+    } else if (translationsData[langCode]) {
+      // 기존 데이터가 있는 경우 설정 유지
+      const fileNameDisplay = input.querySelector(".file-name");
+      settings[langCode] = {
+        fileName: fileNameDisplay.textContent,
+        sourceType: isFileTab ? "file" : "url",
+      };
+    }
+  }
+
+  // 모든 파일 처리 완료 후 저장
+  Promise.all(promises)
+    .then(() => {
+      if (Object.keys(translationsData).length === 0) {
+        showStatus("적용할 번역 데이터가 없습니다.", "error");
+        return;
+      }
+
+      // 처리 완료 후 번역 목록 즉시 업데이트
+      displayTranslations();
+
+      console.log("Chrome 스토리지에 번역 데이터 저장 시도 중...");
+
+      // 배경 스크립트 연결 시도 및 저장
+      saveAndApplyTranslations(settings);
+    })
+    .catch((error) => {
+      showStatus(`오류: ${error.message}`, "error");
+    });
+}
+
+// 번역 데이터 저장 및 적용
+function saveAndApplyTranslations(settings) {
+  // 스토리지에 저장
+  saveAllData(translationsData, settings, function (success) {
+    if (success) {
+      console.log("번역 데이터가 스토리지에 저장되었습니다.");
+
+      // 번역 목록 다시 한번 업데이트 (스토리지 저장 후)
+      displayTranslations();
+
+      // 배경 스크립트 연결 시도
+      tryConnectToBackground(0);
+    } else {
+      showStatus("번역 데이터 저장 실패", "error");
+    }
   });
 }
 
-// '언어 추가' 버튼 클릭 이벤트
-addLanguageBtn.addEventListener("click", () => {
-  addLanguageInput();
-});
+// 배경 스크립트 연결 시도
+function tryConnectToBackground(attemptCount) {
+  const maxAttempts = 2;
+  console.log(`배경 스크립트 연결 시도 ${attemptCount + 1}/${maxAttempts + 1}`);
 
-// '초기화' 버튼 클릭 이벤트
-resetButton.addEventListener("click", () => {
-  if (confirm("모든 데이터를 초기화하시겠습니까?")) {
-    chrome.storage.local.clear(() => {
-      translationsData = {};
-      languageFilesContainer.innerHTML = "";
-      translationList.innerHTML = "";
-      addLanguageInput("ko");
-      addLanguageInput("en");
-      showStatus("모든 데이터가 초기화되었습니다.", "success");
-    });
+  // 언어 설정 수집
+  const settings = {};
+  for (const input of languageInputs) {
+    const langCodeInput = input.querySelector(".lang-code");
+    const langCode = langCodeInput.value.trim();
+
+    if (!langCode) continue;
+
+    const activeTab = input.querySelector(".tab.active");
+    const isFileTab = activeTab.getAttribute("data-target") === "file-tab";
+    const fileNameDisplay = input.querySelector(".file-name");
+    const urlInput = input.querySelector(".url-input");
+
+    settings[langCode] = {
+      fileName: isFileTab ? fileNameDisplay.textContent : urlInput.value.trim(),
+      sourceType: isFileTab ? "file" : "url",
+    };
   }
-});
 
-// 파일 업로드 처리
-uploadButton.addEventListener("click", async () => {
-  try {
-    // 입력 필드 정보 갱신
-    updateLanguageInputs();
+  // 배경 스크립트 연결 테스트
+  chrome.runtime.sendMessage({ action: "ping" }, function (response) {
+    if (chrome.runtime.lastError || !response || !response.success) {
+      console.error("배경 스크립트 연결 실패:", chrome.runtime.lastError);
 
-    // 입력 유효성 검사
-    const invalidInputs = languageInputs.filter((input) => {
-      const langCode = input.langCodeInput.value.trim();
-      return !langCode;
-    });
-
-    if (invalidInputs.length > 0) {
-      showStatus("모든 언어 코드를 입력해주세요.", "error");
-      return;
-    }
-
-    // 중복된 언어 코드 확인
-    const langCodes = languageInputs.map((input) =>
-      input.langCodeInput.value.trim()
-    );
-    if (new Set(langCodes).size !== langCodes.length) {
-      showStatus("언어 코드가 중복되었습니다.", "error");
-      return;
-    }
-
-    // 새로운 데이터 객체와 설정
-    const newTranslationsData = { ...translationsData }; // 기존 데이터 복사
-    const newSettings = [];
-    let loadedCount = 0;
-    let unchangedCount = 0;
-    let errorOccurred = false;
-
-    // 각 언어 입력 처리
-    for (const input of languageInputs) {
-      const langCode = input.langCodeInput.value.trim();
-      const hasNewFile = input.fileInput.files.length > 0;
-      const fileElement = input.fileNameDisplay;
-
-      console.log(`처리 중: ${langCode}, 새 파일: ${hasNewFile}`);
-
-      // 새 파일 선택됨
-      if (hasNewFile) {
-        try {
-          const file = input.fileInput.files[0];
-          const content = await readFileAsync(file);
-          const parsedData = JSON.parse(content);
-
-          // 데이터 저장
-          newTranslationsData[langCode] = parsedData;
-          loadedCount++;
-
-          // 설정 저장
-          newSettings.push({
-            langCode: langCode,
-            fileName: file.name,
-          });
-
-          // UI 업데이트
-          fileElement.textContent = file.name;
-          fileElement.classList.add("file-selected");
-        } catch (error) {
-          showStatus(`${langCode} 파일 처리 오류: ${error.message}`, "error");
-          console.error(`${langCode} 파일 처리 오류:`, error);
-          errorOccurred = true;
-          break;
-        }
-      }
-      // 기존 데이터 있음
-      else if (translationsData[langCode]) {
-        // 기존 데이터 유지
-        newSettings.push({
-          langCode: langCode,
-          fileName: fileElement.textContent || `${langCode}.json`,
-        });
-        unchangedCount++;
-      }
-      // 새 언어인데 파일 없음
-      else {
-        showStatus(`${langCode} 언어 파일을 선택해주세요.`, "error");
-        errorOccurred = true;
-        break;
-      }
-    }
-
-    // 오류 발생 시 중단
-    if (errorOccurred) return;
-
-    // 모든 언어 처리 완료, 데이터 저장
-    saveAllData(newTranslationsData, newSettings, () => {
-      // 상태 메시지 표시
-      let statusMsg = "";
-      if (loadedCount > 0 && unchangedCount > 0) {
-        statusMsg = `${loadedCount}개 파일 업로드, ${unchangedCount}개 파일 유지됨`;
-      } else if (loadedCount > 0) {
-        statusMsg = `${loadedCount}개 파일이 업로드되었습니다.`;
+      // 최대 시도 횟수를 초과하지 않았으면 재시도
+      if (attemptCount < maxAttempts) {
+        setTimeout(() => tryConnectToBackground(attemptCount + 1), 500);
       } else {
-        statusMsg = "기존 번역 데이터가 유지되었습니다.";
+        // 최대 시도 횟수 초과 시 현재 탭에만 적용
+        showStatus(
+          "배경 스크립트 연결 실패. 현재 탭에만 적용합니다.",
+          "warning"
+        );
+
+        // 현재 활성 탭에만 적용
+        applyToCurrentTab();
       }
-      showStatus(statusMsg, "success");
+    } else {
+      // 연결 성공, 모든 탭에 적용
+      console.log("배경 스크립트 연결 성공");
+      saveAllData(translationsData, settings, function (success) {
+        if (success) {
+          showStatus("번역 데이터가 성공적으로 적용되었습니다.", "success");
 
-      // 로드 결과 확인
-      console.log("최종 결과:", {
-        translations: Object.keys(newTranslationsData),
-        settings: newSettings,
+          // 번역 데이터 업데이트 메시지 전송
+          chrome.runtime.sendMessage({
+            action: "updateTranslations",
+            translations: translationsData,
+          });
+        } else {
+          showStatus("번역 데이터 저장 실패. 현재 탭에만 적용합니다.", "error");
+          applyToCurrentTab();
+        }
       });
-    });
-  } catch (error) {
-    console.error("업로드 처리 오류:", error);
-    showStatus("업로드 처리 오류: " + error.message, "error");
-  }
-});
+    }
+  });
+}
 
-// 파일 비동기 읽기 함수
+// 현재 탭에만 적용
+function applyToCurrentTab() {
+  console.log("현재 활성 탭에 번역 데이터 적용 시도");
+
+  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+    if (tabs.length > 0) {
+      console.log("활성 탭 ID:", tabs[0].id);
+      console.log("적용할 번역 데이터 키:", Object.keys(translationsData));
+
+      chrome.tabs.sendMessage(
+        tabs[0].id,
+        {
+          action: "updateTranslations",
+          translations: translationsData,
+        },
+        function (response) {
+          if (chrome.runtime.lastError) {
+            console.error(
+              "현재 탭 메시지 전송 오류:",
+              chrome.runtime.lastError
+            );
+            showStatus(
+              "현재 탭에 데이터 적용 실패 - 페이지를 새로고침하세요",
+              "error"
+            );
+
+            // 2초 후 다시 시도
+            setTimeout(() => {
+              chrome.tabs.sendMessage(tabs[0].id, {
+                action: "updateTranslations",
+                translations: translationsData,
+              });
+            }, 2000);
+          } else if (response && response.success) {
+            console.log("현재 탭에 데이터 적용 성공:", response);
+            showStatus("현재 탭에 번역 데이터가 적용되었습니다.", "success");
+          } else {
+            console.warn("현재 탭 응답 없음, 다시 시도");
+            // 응답이 없으면 다시 시도
+            setTimeout(() => {
+              chrome.tabs.sendMessage(tabs[0].id, {
+                action: "updateTranslations",
+                translations: translationsData,
+              });
+            }, 1000);
+          }
+        }
+      );
+
+      // 1초 후 processPage 메시지도 전송
+      setTimeout(() => {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "processPage" });
+      }, 1000);
+    } else {
+      showStatus("활성 탭을 찾을 수 없습니다.", "error");
+    }
+  });
+}
+
+// 파일 비동기 읽기
 function readFileAsync(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (event) => resolve(event.target.result);
-    reader.onerror = (error) => reject(error);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("파일 읽기 실패"));
     reader.readAsText(file);
   });
 }
 
 // 상태 메시지 표시
-function showStatus(message, type) {
+function showStatus(message, type = "info") {
   statusMessage.textContent = message;
-  statusMessage.className = "status-message " + type;
+  statusMessage.className = `status-message ${type}`;
+  statusMessage.style.display = "block";
 
-  // 3초 후 메시지 숨기기
-  setTimeout(() => {
-    statusMessage.className = "status-message";
-  }, 3000);
+  // 메시지 유형에 따라 표시 시간 조정
+  const timeout = type === "error" ? 5000 : type === "warning" ? 4000 : 3000;
+
+  // 기존 타이머 제거
+  if (statusMessage.timer) {
+    clearTimeout(statusMessage.timer);
+  }
+
+  // 새 타이머 설정
+  statusMessage.timer = setTimeout(() => {
+    statusMessage.style.display = "none";
+  }, timeout);
 }
 
-// 번역 데이터 표시
+// 번역 목록 표시
 function displayTranslations() {
   translationList.innerHTML = "";
 
-  if (!translationsData || Object.keys(translationsData).length === 0) {
-    translationList.innerHTML =
-      "<div class='no-translations'>로드된 번역 데이터가 없습니다.</div>";
+  // 모든 언어의 번역 키 수집
+  const allKeys = new Set();
+  for (const langCode in translationsData) {
+    Object.keys(translationsData[langCode]).forEach((key) => allKeys.add(key));
+  }
+
+  if (allKeys.size === 0) {
+    translationList.innerHTML = "<p>등록된 번역이 없습니다.</p>";
     return;
   }
 
-  // 업로드 상태 표시
-  const statusInfo = document.createElement("div");
-  statusInfo.className = "upload-status";
-  statusInfo.textContent = `${Object.keys(translationsData).length}개 파일 로드됨, ${
-    translationList.querySelectorAll(".translation-item").length
-  }개 파일 유지됨`;
-  translationList.appendChild(statusInfo);
+  // 각 키에 대한 번역 표시
+  allKeys.forEach((key) => {
+    const item = document.createElement("div");
+    item.className = "translation-item";
 
-  // 첫 번째 언어의 키를 기준으로 표시
-  const firstLangCode = Object.keys(translationsData)[0];
-  if (!firstLangCode) return;
+    const keyElement = document.createElement("div");
+    keyElement.className = "translation-key";
+    keyElement.textContent = key;
+    item.appendChild(keyElement);
 
-  const keys = Object.keys(translationsData[firstLangCode]);
+    // 각 언어별 번역 표시
+    for (const langCode in translationsData) {
+      const value = translationsData[langCode][key];
+      if (value) {
+        const valueElement = document.createElement("div");
+        valueElement.className = "translation-value";
+        valueElement.innerHTML = `<span class="lang-label">${langCode}:</span> ${value}`;
+        item.appendChild(valueElement);
+      }
+    }
 
-  keys.sort().forEach((key) => {
-    const itemElement = document.createElement("div");
-    itemElement.className = "translation-item";
-
-    let html = `<div class="key">${key}</div>`;
-
-    // 각 언어별 번역값 표시
-    Object.entries(translationsData).forEach(([langCode, translations]) => {
-      const value = translations[key] || "(번역 없음)";
-      html += `
-        <div class="translation">
-          <span class="language">${langCode}:</span>
-          <span class="value">${value}</span>
-        </div>
-      `;
-    });
-
-    itemElement.innerHTML = html;
-    translationList.appendChild(itemElement);
+    translationList.appendChild(item);
   });
 }
 
-// 언어 설정 업데이트 (통합 함수)
+// 언어 설정 업데이트
 function updateLanguageSettings(langCode, fileName, sourceType = "file") {
-  chrome.storage.local.get(["languageSettings"], (data) => {
-    let settings = data.languageSettings || [];
+  chrome.storage.local.get(["languageSettings"], function (result) {
+    const settings = result.languageSettings || {};
+    settings[langCode] = { fileName, sourceType };
 
-    // 기존 설정 제거
-    settings = settings.filter((s) => s.langCode !== langCode);
-
-    // 새 설정 추가
-    settings.push({
-      langCode: langCode,
-      fileName: fileName,
-      sourceType: sourceType,
+    chrome.storage.local.set({ languageSettings: settings }, function () {
+      if (chrome.runtime.lastError) {
+        console.error("설정 저장 오류:", chrome.runtime.lastError);
+      }
     });
-
-    // 저장
-    saveAllData(translationsData, settings);
   });
 }
 
-// 페이지 로드 시 설정 로드
-document.addEventListener("DOMContentLoaded", loadSavedSettings);
+// 이벤트 리스너
+document.addEventListener("DOMContentLoaded", function () {
+  // 저장된 데이터 로드
+  loadSavedSettings();
+
+  // 언어 추가 버튼
+  addLanguageBtn.addEventListener("click", function () {
+    addLanguageInput();
+  });
+
+  // 파일 업로드 및 적용 버튼
+  uploadButton.addEventListener("click", function () {
+    applyTranslations();
+  });
+
+  // 초기화 버튼
+  resetButton.addEventListener("click", function () {
+    if (confirm("모든 번역 데이터를 초기화하시겠습니까?")) {
+      // 스토리지 초기화
+      chrome.storage.local.clear(function () {
+        // UI 초기화
+        translationsData = {};
+        updateLanguageInputs();
+        displayTranslations();
+        showStatus("모든 데이터가 초기화되었습니다.", "info");
+
+        // 배경 스크립트 초기화 메시지
+        chrome.runtime.sendMessage({ action: "clearTranslations" });
+
+        // 현재 탭 초기화
+        chrome.tabs.query(
+          { active: true, currentWindow: true },
+          function (tabs) {
+            if (tabs.length > 0) {
+              chrome.tabs.sendMessage(tabs[0].id, {
+                action: "clearTranslations",
+              });
+            }
+          }
+        );
+      });
+    }
+  });
+});

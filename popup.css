@@ -38,35 +38,45 @@ h2 {
 
 .language-input {
   margin-bottom: 15px;
-  padding: 10px;
-  border-radius: 6px;
-  background-color: #f1f3f4;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 15px;
+  border-radius: 8px;
+  background-color: #f5f7f9;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e0e4e8;
 }
 
 .input-group {
   display: flex;
-  align-items: center;
-  margin-bottom: 8px;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  position: relative;
 }
 
 .lang-code-wrapper {
-  width: 70px;
-  margin-right: 10px;
+  width: 80px;
+  margin-right: 12px;
+  flex-shrink: 0;
 }
 
 .lang-code {
   width: 100%;
-  padding: 8px;
+  padding: 8px 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 13px;
   background-color: #fff;
+  transition: all 0.2s ease;
+}
+
+.lang-code:focus {
+  border-color: #4285f4;
+  box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+  outline: none;
 }
 
 .file-input-wrapper {
   flex: 1;
-  position: relative;
+  min-width: 0;
 }
 
 .tab-container {
@@ -76,7 +86,7 @@ h2 {
 }
 
 .tab {
-  padding: 8px 12px;
+  padding: 8px 16px;
   background-color: #f1f3f4;
   color: #5f6368;
   border-radius: 4px 4px 0 0;
@@ -85,6 +95,11 @@ h2 {
   cursor: pointer;
   border: 1px solid #e0e0e0;
   border-bottom: none;
+  transition: all 0.2s ease;
+}
+
+.tab:hover {
+  background-color: #e8eaed;
 }
 
 .tab.active {
@@ -104,8 +119,109 @@ h2 {
   flex-direction: column;
 }
 
+.url-input-container {
+  display: flex;
+  width: 100%;
+  align-items: center;
+}
+
+.url-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  background-color: #fff;
+  min-width: 0;
+  transition: all 0.2s ease;
+}
+
+.url-input:focus {
+  border-color: #4285f4;
+  box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+  outline: none;
+}
+
+.fetch-btn {
+  background-color: #4285f4;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.fetch-btn:hover {
+  background-color: #3367d6;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.fetch-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.remove-lang-btn {
+  width: 26px;
+  height: 26px;
+  background: #f44336;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.remove-lang-btn:hover {
+  background-color: #d32f2f;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.remove-lang-btn:active {
+  transform: scale(0.95);
+}
+
+/* 파일 탭의 X 버튼 스타일 */
+.file-remove-btn {
+  margin-left: 10px;
+  align-self: center;
+}
+
+/* URL 탭의 X 버튼 스타일 */
+.url-remove-btn {
+  margin-left: 8px;
+}
+
+/* 현재 활성화된 탭에 따라 버튼 표시/숨김 */
+.tab-content.url-tab.active ~ .file-remove-btn {
+  display: none !important;
+}
+
+.tab-content.file-tab.active ~ .url-remove-btn {
+  display: none !important;
+}
+
 .lang-file {
   display: none;
+}
+
+.file-content-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
 
 .file-btn {
@@ -119,10 +235,12 @@ h2 {
   border: 1px solid #ddd;
   text-align: center;
   width: 100%;
+  transition: all 0.2s ease;
 }
 
 .file-btn:hover {
   background-color: #e0e0e0;
+  border-color: #bbb;
 }
 
 .file-name {
@@ -137,6 +255,7 @@ h2 {
   width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-selected {
@@ -144,22 +263,6 @@ h2 {
   color: #2196f3;
   font-weight: bold;
   border-color: #bbdefb;
-}
-
-.remove-lang-btn {
-  width: 25px;
-  height: 25px;
-  margin-left: 8px;
-  background: #f44336;
-  color: white;
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
 }
 
 .action-buttons {
@@ -289,30 +392,6 @@ button {
 .url-github {
   width: 100%;
   margin-top: 8px;
-}
-
-.url-input {
-  flex: 1;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 13px;
-  background-color: #fff;
-}
-
-.fetch-btn {
-  background-color: #4285f4;
-  color: white;
-  border: none;
-  padding: 8px 15px;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.fetch-btn:hover {
-  background-color: #3367d6;
 }
 
 .github-form {

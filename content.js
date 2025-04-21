@@ -227,7 +227,7 @@ function showMessagePanel(message) {
 }
 
 // 키 목록 패널 표시
-function showKeysPanel(keys) {
+function showKeysPanel(results) {
   const panel = document.createElement("div");
   panel.id = "i18n-translation-panel";
   panel.style.cssText = `
@@ -246,7 +246,7 @@ function showKeysPanel(keys) {
   `;
 
   // 패널 헤더
-  const header = createPanelHeader("Translation Keys");
+  const header = createPanelHeader("Translation Keys", results);
 
   // 패널 내용 (스크롤 가능)
   const contentWrapper = document.createElement("div");
@@ -257,7 +257,7 @@ function showKeysPanel(keys) {
   `;
 
   // 키 카드 생성
-  Array.from(keys.keys)
+  Array.from(results.keys)
     .sort()
     .forEach((key) => {
       const card = document.createElement("div");
@@ -315,7 +315,7 @@ function showKeysPanel(keys) {
       });
 
       // 발견된 텍스트 표시 (해당 키에 매칭된 텍스트가 있는 경우)
-      const matchedTexts = keys.keyToTexts[key] || [];
+      const matchedTexts = results.keyToTexts[key] || [];
       if (matchedTexts.length > 0) {
         const matchesSection = document.createElement("div");
         matchesSection.style.cssText = `
@@ -364,7 +364,7 @@ function showKeysPanel(keys) {
 }
 
 // 패널 헤더 생성
-function createPanelHeader(title) {
+function createPanelHeader(title, results = null) {
   const header = document.createElement("div");
   header.style.cssText = `
     padding: 12px;
@@ -385,6 +385,29 @@ function createPanelHeader(title) {
     gap: 10px;
     align-items: center;
   `;
+
+  // 다운로드 버튼 추가 (결과가 있을 때만)
+  if (results && results.keys.size > 0) {
+    const downloadButton = document.createElement("button");
+    downloadButton.innerHTML = "↓";
+    downloadButton.title = "결과 다운로드";
+    downloadButton.style.cssText = `
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px 6px;
+      margin: 0;
+      border-radius: 4px;
+    `;
+
+    downloadButton.addEventListener("click", () => {
+      exportResults(results);
+    });
+
+    buttonContainer.appendChild(downloadButton);
+  }
 
   // 완전 일치 모드 전환 버튼 추가
   const exactMatchButton = document.createElement("button");
@@ -469,6 +492,61 @@ function createPanelHeader(title) {
   header.appendChild(buttonContainer);
 
   return header;
+}
+
+// 결과를 파일로 내보내기 기능
+function exportResults(results) {
+  try {
+    // 결과를 JSON 형식으로 포맷팅
+    const exportData = {
+      searchMode: exactMatchMode ? "Exact Match" : "Partial Match",
+      timestamp: new Date().toISOString(),
+      pageTitle: document.title,
+      pageURL: window.location.href,
+      matchingKeys: {},
+    };
+
+    // 매칭된 키와 번역 정보 추가
+    Array.from(results.keys)
+      .sort()
+      .forEach((key) => {
+        exportData.matchingKeys[key] = {
+          translations: {},
+          matchedTexts: results.keyToTexts[key] || [],
+        };
+
+        // 각 언어별 번역 추가
+        Object.entries(translations).forEach(([langCode, langData]) => {
+          exportData.matchingKeys[key].translations[langCode] =
+            langData[key] || "(No translation)";
+        });
+      });
+
+    // 파일로 다운로드
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: "application/json" });
+
+    // 파일명 생성 (페이지 제목 + 날짜)
+    const pageTitle = document.title
+      .replace(/[^a-z0-9]/gi, "_")
+      .substring(0, 30);
+    const dateStr = new Date().toISOString().split("T")[0];
+    const fileName = `translation_keys_${pageTitle}_${dateStr}.json`;
+
+    // 다운로드 링크 생성 및 클릭
+    const downloadLink = document.createElement("a");
+    downloadLink.href = URL.createObjectURL(dataBlob);
+    downloadLink.download = fileName;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+
+    // 사용자에게 알림
+    alert("번역 키 정보가 파일로 다운로드되었습니다.");
+  } catch (error) {
+    console.error("Error exporting results:", error);
+    alert("결과 내보내기 중 오류가 발생했습니다.");
+  }
 }
 
 // 확장 프로그램 팝업으로부터 메시지 수신

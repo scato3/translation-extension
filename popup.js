@@ -142,7 +142,7 @@ function addLanguageInput(langCode = "", fileName = "", sourceType = "file") {
         // 크롬 스토리지에 즉시 저장
         saveAllData(translationsData, null, function (success) {
           if (success) {
-            console.log("URL에서 가져온 데이터가 스토리지에 저장되었습니다.");
+            ("URL에서 가져온 데이터가 스토리지에 저장되었습니다.");
 
             // 배경 스크립트에도 데이터 업데이트
             chrome.runtime.sendMessage({
@@ -252,7 +252,7 @@ function saveAllData(translations, settings, callback) {
     }
   }
 
-  console.log("저장 중인 설정:", settings);
+  "저장 중인 설정:", settings;
 
   chrome.storage.local.set(
     {
@@ -265,7 +265,7 @@ function saveAllData(translations, settings, callback) {
         showStatus("저장 중 오류가 발생했습니다.", "error");
         if (callback) callback(false);
       } else {
-        console.log("번역 데이터와 설정 저장 완료");
+        ("번역 데이터와 설정 저장 완료");
         if (callback) callback(true);
       }
     }
@@ -362,7 +362,7 @@ function applyTranslations() {
       // 처리 완료 후 번역 목록 즉시 업데이트
       displayTranslations();
 
-      console.log("Chrome 스토리지에 번역 데이터 저장 시도 중...");
+      ("Chrome 스토리지에 번역 데이터 저장 시도 중...");
 
       // 배경 스크립트 연결 시도 및 저장
       saveAndApplyTranslations(settings);
@@ -377,7 +377,7 @@ function saveAndApplyTranslations(settings) {
   // 스토리지에 저장
   saveAllData(translationsData, settings, function (success) {
     if (success) {
-      console.log("번역 데이터가 스토리지에 저장되었습니다.");
+      ("번역 데이터가 스토리지에 저장되었습니다.");
 
       // 번역 목록 다시 한번 업데이트 (스토리지 저장 후)
       displayTranslations();
@@ -393,7 +393,7 @@ function saveAndApplyTranslations(settings) {
 // 배경 스크립트 연결 시도
 function tryConnectToBackground(attemptCount) {
   const maxAttempts = 2;
-  console.log(`배경 스크립트 연결 시도 ${attemptCount + 1}/${maxAttempts + 1}`);
+  `배경 스크립트 연결 시도 ${attemptCount + 1}/${maxAttempts + 1}`;
 
   // 언어 설정 수집
   const settings = {};
@@ -434,7 +434,7 @@ function tryConnectToBackground(attemptCount) {
       }
     } else {
       // 연결 성공, 모든 탭에 적용
-      console.log("배경 스크립트 연결 성공");
+      ("배경 스크립트 연결 성공");
       saveAllData(translationsData, settings, function (success) {
         if (success) {
           showStatus("번역 데이터가 성공적으로 적용되었습니다.", "success");
@@ -455,12 +455,12 @@ function tryConnectToBackground(attemptCount) {
 
 // 현재 탭에만 적용
 function applyToCurrentTab() {
-  console.log("현재 활성 탭에 번역 데이터 적용 시도");
+  ("현재 활성 탭에 번역 데이터 적용 시도");
 
   chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
     if (tabs.length > 0) {
-      console.log("활성 탭 ID:", tabs[0].id);
-      console.log("적용할 번역 데이터 키:", Object.keys(translationsData));
+      "활성 탭 ID:", tabs[0].id;
+      "적용할 번역 데이터 키:", Object.keys(translationsData);
 
       chrome.tabs.sendMessage(
         tabs[0].id,
@@ -487,7 +487,7 @@ function applyToCurrentTab() {
               });
             }, 2000);
           } else if (response && response.success) {
-            console.log("현재 탭에 데이터 적용 성공:", response);
+            "현재 탭에 데이터 적용 성공:", response;
             showStatus("현재 탭에 번역 데이터가 적용되었습니다.", "success");
           } else {
             console.warn("현재 탭 응답 없음, 다시 시도");

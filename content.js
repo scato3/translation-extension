@@ -1,6 +1,9 @@
 // 번역 데이터
 let translations = null;
 
+// 검색 모드 (true: 완전 일치, false: 부분 일치)
+let exactMatchMode = false;
+
 // 페이지에서 텍스트 분석 및 표시
 function processPage() {
   try {
@@ -50,6 +53,10 @@ function findMatchingKeys() {
     console.log(
       "Finding matching keys with translations:",
       Object.keys(translations)
+    );
+    console.log(
+      "Search mode:",
+      exactMatchMode ? "Exact match" : "Partial match"
     );
 
     // 텍스트 노드 추출 - 화면에 보이는 텍스트만 추출
@@ -110,50 +117,69 @@ function findMatchingKeys() {
       pageWords.add(text);
     });
 
-    console.log(
-      `Extracted ${pageWords.size} unique words/phrases from the page`
-    );
-
     // 실제 매칭 시도
     Object.entries(translations).forEach(([langCode, langData]) => {
       Object.entries(langData).forEach(([key, value]) => {
         if (typeof value === "string" && value.trim() !== "") {
-          // 값이 페이지의 어떤 텍스트에 포함되는지 확인
-          textNodes.forEach((text) => {
-            if (text.includes(value)) {
+          // 완전 일치 모드일 때
+          if (exactMatchMode) {
+            textNodes.forEach((text) => {
+              if (text === value) {
+                foundKeys.add(key);
+
+                // 매칭된 텍스트 저장 (중복 방지)
+                if (!keyToTexts[key]) {
+                  keyToTexts[key] = [];
+                }
+                if (!keyToTexts[key].includes(text)) {
+                  keyToTexts[key].push(`[Exact match] ${text}`);
+                }
+              }
+            });
+          }
+          // 부분 일치 모드일 때
+          else {
+            // 값이 페이지의 어떤 텍스트에 포함되는지 확인
+            textNodes.forEach((text) => {
+              if (text.includes(value)) {
+                foundKeys.add(key);
+
+                // 매칭된 텍스트 저장 (중복 방지)
+                if (!keyToTexts[key]) {
+                  keyToTexts[key] = [];
+                }
+                if (!keyToTexts[key].includes(text)) {
+                  keyToTexts[key].push(text);
+                }
+              }
+            });
+
+            // 값에서 단어 추출해서 페이지의 단어와 비교
+            const valueWords = value.match(/\b\w+\b/g) || [];
+            let wordMatches = 0;
+
+            valueWords.forEach((word) => {
+              if (
+                word &&
+                word.length > 1 &&
+                pageWords.has(word.toLowerCase())
+              ) {
+                wordMatches++;
+              }
+            });
+
+            // 최소 2개 이상의 단어가 일치하면 결과에 추가
+            if (valueWords.length >= 3 && wordMatches >= 2) {
               foundKeys.add(key);
 
-              // 매칭된 텍스트 저장 (중복 방지)
               if (!keyToTexts[key]) {
                 keyToTexts[key] = [];
               }
-              if (!keyToTexts[key].includes(text)) {
-                keyToTexts[key].push(text);
-              }
+
+              keyToTexts[key].push(
+                `Matched ${wordMatches} words from: "${value}"`
+              );
             }
-          });
-
-          // 값에서 단어 추출해서 페이지의 단어와 비교
-          const valueWords = value.match(/\b\w+\b/g) || [];
-          let wordMatches = 0;
-
-          valueWords.forEach((word) => {
-            if (word && word.length > 1 && pageWords.has(word.toLowerCase())) {
-              wordMatches++;
-            }
-          });
-
-          // 최소 2개 이상의 단어가 일치하면 결과에 추가
-          if (valueWords.length >= 3 && wordMatches >= 2) {
-            foundKeys.add(key);
-
-            if (!keyToTexts[key]) {
-              keyToTexts[key] = [];
-            }
-
-            keyToTexts[key].push(
-              `Matched ${wordMatches} words from: "${value}"`
-            );
           }
         }
       });
@@ -357,7 +383,47 @@ function createPanelHeader(title) {
   buttonContainer.style.cssText = `
     display: flex;
     gap: 10px;
+    align-items: center;
   `;
+
+  // 완전 일치 모드 전환 버튼 추가
+  const exactMatchButton = document.createElement("button");
+  exactMatchButton.innerHTML = "=";
+  exactMatchButton.title = exactMatchMode
+    ? "완전 일치 모드 (활성화됨)"
+    : "완전 일치 모드 (비활성화됨)";
+  exactMatchButton.style.cssText = `
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 6px;
+    margin: 0;
+    border-radius: 4px;
+    background-color: ${
+      exactMatchMode ? "rgba(255, 255, 255, 0.3)" : "transparent"
+    };
+    font-weight: bold;
+  `;
+
+  exactMatchButton.addEventListener("click", () => {
+    // 완전 일치 모드 전환
+    exactMatchMode = !exactMatchMode;
+
+    // 버튼 스타일 업데이트
+    exactMatchButton.title = exactMatchMode
+      ? "완전 일치 모드 (활성화됨)"
+      : "완전 일치 모드 (비활성화됨)";
+    exactMatchButton.style.backgroundColor = exactMatchMode
+      ? "rgba(255, 255, 255, 0.3)"
+      : "transparent";
+
+    // 현재 페이지 다시 처리
+    const panel = document.getElementById("i18n-translation-panel");
+    if (panel) document.body.removeChild(panel);
+    processPage();
+  });
 
   // 새로고침 버튼 추가
   const refreshButton = document.createElement("button");
@@ -395,6 +461,7 @@ function createPanelHeader(title) {
     if (panel) document.body.removeChild(panel);
   });
 
+  buttonContainer.appendChild(exactMatchButton);
   buttonContainer.appendChild(refreshButton);
   buttonContainer.appendChild(closeButton);
 

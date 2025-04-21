@@ -5,7 +5,7 @@ let translations = {};
 
 // 설치 시 초기화
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("i18n 번역기가 설치되었습니다.");
+  ("i18n 번역기가 설치되었습니다.");
 
   // 저장된 번역 데이터 불러오기
   loadTranslations();
@@ -16,18 +16,18 @@ loadTranslations();
 
 // 메시지 리스너 설정
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log("배경 스크립트에서 수신한 메시지:", message.action);
+  "배경 스크립트에서 수신한 메시지:", message.action;
 
   // 핑 응답 (연결 확인용)
   if (message.action === "ping") {
-    console.log("핑 요청 수신됨");
+    ("핑 요청 수신됨");
     sendResponse({ success: true, message: "배경 스크립트 연결됨" });
     return true;
   }
 
   // 번역 데이터 요청
   if (message.action === "getTranslations") {
-    console.log("번역 데이터 요청 수신됨", Object.keys(translations));
+    "번역 데이터 요청 수신됨", Object.keys(translations);
     sendResponse({ translations: translations });
     return true;
   }
@@ -56,7 +56,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "clearTranslations") {
     translations = {};
     chrome.storage.local.remove("translations", () => {
-      console.log("번역 데이터가 초기화되었습니다.");
+      ("번역 데이터가 초기화되었습니다.");
 
       // 모든 탭에 알림
       broadcastToAllTabs();
@@ -79,9 +79,9 @@ function loadTranslations() {
 
     if (result.translations) {
       translations = result.translations;
-      console.log("번역 데이터 로드됨:", Object.keys(translations));
+      "번역 데이터 로드됨:", Object.keys(translations);
     } else {
-      console.log("저장된 번역 데이터가 없습니다.");
+      ("저장된 번역 데이터가 없습니다.");
     }
   });
 }
@@ -92,7 +92,7 @@ function saveTranslations(data) {
     if (chrome.runtime.lastError) {
       console.error("번역 데이터 저장 오류:", chrome.runtime.lastError);
     } else {
-      console.log("번역 데이터 저장됨:", Object.keys(data));
+      "번역 데이터 저장됨:", Object.keys(data);
     }
   });
 }
